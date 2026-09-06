@@ -71,6 +71,7 @@ func (s *Server) AcceptListener() {
 		clientCreated := client.NewClient(conn)
 		clientCreated.ReadRequest()
 		clientCreated.WriteResponse()
+		defer conn.Close()
 	}, func(err error) bool {
 		log.Println("Error handling a connection ")
 		s.SrvCancel() //cancels any routine that uses this context
