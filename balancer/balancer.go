@@ -22,8 +22,8 @@ type Backend struct {
 	rp    *httputil.ReverseProxy
 }
 type ServerPool struct {
-	backends []*Backend
-	current  int
+	Backends []*Backend
+	Current  int
 }
 
 func NewBackend(refUrl string) *Backend {
@@ -48,9 +48,12 @@ func (b *Backend) IsAlive() bool {
 	return b.Alive
 
 }
+func (s *ServerPool) AddBackend(backend *Backend) {
+	s.Backends = append(s.Backends, backend)
+}
 
 func (s *ServerPool) NextIdx() int {
-	return ((s.current + (1)) % (len(s.backends)))
+	return ((s.Current + (1)) % (len(s.Backends)))
 }
 
 func (s *ServerPool) GetNextPeer() *Backend {
@@ -58,28 +61,22 @@ func (s *ServerPool) GetNextPeer() *Backend {
 
 	for {
 		fmt.Printf(" nextIdx %d\n", nextIdx)
-		nextIdx %= len(s.backends)
+		nextIdx %= len(s.Backends)
 
-		if !s.backends[nextIdx].IsAlive() {
+		if !s.Backends[nextIdx].IsAlive() {
 			nextIdx += 1
 			continue
 		}
 
-		s.current += nextIdx
-		return s.backends[nextIdx]
+		s.Current += nextIdx
+		return s.Backends[nextIdx]
 	}
 }
 
-func Run() {
+func Run(serverPool *ServerPool) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	serverPool := ServerPool{
-		backends: make([]*Backend, 1),
-		current:  0,
-	}
-	serverPool.backends[0] = NewBackend("http://localhost:5173")
 
 	lb := func(w http.ResponseWriter, rq *http.Request) {
 		peer := serverPool.GetNextPeer()
@@ -109,6 +106,7 @@ func Run() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
+		fmt.Println("Load balancer signal interrupt")
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
 		server.Shutdown(shutdownCtx)
