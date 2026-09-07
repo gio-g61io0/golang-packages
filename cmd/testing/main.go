@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"personal-http-server/balancer"
 	"personal-http-server/server"
@@ -14,8 +15,9 @@ const STARTPORT int = 5173
 func main() {
 	//spin up the load balancer
 	serverPool := balancer.ServerPool{
-		Backends: []*balancer.Backend{},
-		Current:  0,
+		Backends:         []*balancer.Backend{},
+		Current:          0,
+		LoadDistribution: make([]int, NUMBACKENDS),
 	}
 	var wg sync.WaitGroup
 
@@ -23,20 +25,22 @@ func main() {
 
 		lc := net.ListenConfig{}
 		wg.Add(1)
+		port := STARTPORT + i
+
+		server := server.NewServer("Test Server", "localhost", strconv.Itoa(port), lc)
 
 		wg.Go(func() {
 			defer wg.Done()
-			port := STARTPORT + i
-			server := server.NewServer("Test Server", "localhost", strconv.Itoa(port), lc)
 			defer server.SrvCancel()
 
 			go server.StartServer()
 			server.WaitForShutdown()
 		})
 
-		serverPool.AddBackend(balancer.NewBackend("http://localhost:5173"))
+		serverPool.AddBackend(serverPool.NewBackend(fmt.Sprintf("http://localhost:%d", port), server))
 	}
 	go balancer.Run(&serverPool)
+	go balancer.HealthCheck(&serverPool)
 	wg.Wait()
 
 }
