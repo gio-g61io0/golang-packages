@@ -49,6 +49,9 @@ func GetAttemptFromContext(r *http.Request) int {
 	return 0
 }
 
+func (b *Backend) BackendAlive() bool {
+	return b.Alive
+}
 func (b *Backend) IsAlive() bool {
 	timeout := time.Second * 2
 	conn, err := net.DialTimeout("tcp", b.URL.Host, timeout)
@@ -92,9 +95,9 @@ func HealthCheck(s *ServerPool) {
 }
 
 func (s *ServerPool) MarkBackendStatus(url *url.URL, status bool) bool {
-	for backend := range len(s.Backends) {
-		if s.Backends[backend].URL == url {
-			s.Backends[backend].SetAlive(status)
+	for _, backend := range s.Backends {
+		if backend.URL == url {
+			backend.SetAlive(status)
 			return true
 		}
 	}
@@ -159,7 +162,7 @@ func (s *ServerPool) GetNextPeer() *Backend {
 		fmt.Printf(" nextIdx %d\n", nextIdx)
 		nextIdx %= len(s.Backends)
 
-		if !s.Backends[nextIdx].IsAlive() {
+		if !s.Backends[nextIdx].BackendAlive() {
 			nextIdx += 1
 			continue
 		}

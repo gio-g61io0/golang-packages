@@ -106,6 +106,7 @@ func (s *Server) IsDone() {
 	<-s.done
 }
 func (s *Server) WaitForShutdown() {
+
 	log.Println("waiting for shutdown")
 	select {
 	case <-s.done:
