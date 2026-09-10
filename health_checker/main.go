@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"personal-http-server/health_checker/ssh"
 	"strconv"
 	"sync"
 	"syscall"
@@ -107,16 +108,18 @@ func Load() (*Config, error) {
 }
 
 type Client struct {
-	http *http.Client
-	ctx  *context.Context
+	http   *http.Client
+	ctx    *context.Context
+	config *Config
 }
 
-func InitClient(timeout time.Duration, parentCtx *context.Context) *Client {
+func InitClient(timeout time.Duration, parentCtx *context.Context, config *Config) *Client {
 	return &Client{
 		http: &http.Client{
 			Timeout: timeout,
 		},
-		ctx: parentCtx,
+		ctx:    parentCtx,
+		config: config,
 	}
 
 }
@@ -126,7 +129,7 @@ func (client *Client) HealthCheck(healthCheckChan chan HealthCheckResult) {
 	timeoutCtx, cancel := context.WithTimeout(*client.ctx, time.Duration(time.Second*10))
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodGet, BROKER_URL, nil)
+	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodGet, client.config.BrokerUrl, nil)
 	if err != nil {
 		slog.Error("Something went wrong creating a request instance", "error", err)
 		return
@@ -159,21 +162,40 @@ func (client *Client) HealthCheck(healthCheckChan chan HealthCheckResult) {
 		}
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		healthCheckChan <- HealthCheckResult{
-			Err:     fmt.Errorf("Broker return non 2xx status code"),
-			Message: "Broker return non 2xx status code",
-			ErrType: BadStatusCode,
-		}
-	}
+	//NOTE:: This is commented for now since the broker dont have any /health endpoint for returning 200 when everything is working
+	// if resp.StatusCode != http.StatusOK {
+	// 	healthCheckChan <- HealthCheckResult{
+	// 		Err:     fmt.Errorf("Broker return non 2xx status code"),
+	// 		Message: "Broker return non 2xx status code",
+	// 		ErrType: BadStatusCode,
+	// 	}
+	// }
 
 	slog.Info("Broker Responded", "Status Code", resp.StatusCode, "Message", string(body))
 
 }
 
+func QueryDB(ctx context.Context) error {
+	select {
+	case <-time.After(3 * time.Second):
+		fmt.Println("Query is done")
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 func main() {
 	parentCtx, parentCancel := context.WithCancel(context.Background())
+	testTimeoutCtx, testCancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer testCancel()
 	defer parentCancel()
+
+	if err := QueryDB(testTimeoutCtx); err != nil {
+		fmt.Println("Timed out:", err) // context.DeadlineExceeded
+	} else {
+		fmt.Println("Nailed it!")
+	}
+
 	config, err := Load()
 
 	if err != nil {
@@ -188,7 +210,7 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
-	client := InitClient(time.Duration(time.Second*10), &parentCtx)
+	client := InitClient(time.Duration(time.Second*10), &parentCtx, config)
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
@@ -206,6 +228,10 @@ func main() {
 				return
 			}
 		}
+	})
+
+	wg.Go(func() {
+		ssh.Connect(parentCtx)
 	})
 
 	wg.Go(func() {
