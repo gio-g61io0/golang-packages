@@ -24,10 +24,6 @@ const (
 	BadStatusCode HealthCheckErr = "Bad Status Code"
 )
 
-const BROKER_URL string = "https://uat.sindbad.tech/"
-const EMAIL_FROM string = "test@example.com"
-const EMAIL_TO string = "gio.gonzales@sindbad.tech"
-
 type Config struct {
 	BrokerUrl    string
 	EmailFrom    string
