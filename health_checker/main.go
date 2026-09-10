@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/joho/godotenv"
-	gomail "gopkg.in/mail.v2"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,6 +12,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/joho/godotenv"
+	gomail "gopkg.in/mail.v2"
+)
+
+type HealthCheckErr string
+
+const (
+	UnResponsive  HealthCheckErr = "Unresponsive"
+	BadStatusCode HealthCheckErr = "Bad Status Code"
 )
 
 const BROKER_URL string = "https://uat.sindbad.tech/"
@@ -35,6 +44,12 @@ type Mail struct {
 	Body    string
 }
 
+type HealthCheckResult struct {
+	Err     error
+	Message string
+	ErrType HealthCheckErr
+}
+
 type MailManager struct {
 	dialer *gomail.Dialer
 }
@@ -45,6 +60,7 @@ func (manager *MailManager) SendEmail(mail *Mail) error {
 	message.SetHeader("From", mail.From)
 	message.SetHeader("Subject", mail.Subject)
 	message.SetHeader("To", mail.To)
+	message.SetBody("plain/text", mail.Body)
 
 	if err := manager.dialer.DialAndSend(message); err != nil {
 		slog.Error("Error sending email", "Error", err)
@@ -109,9 +125,12 @@ func InitClient(timeout time.Duration, parentCtx *context.Context) *Client {
 
 }
 
-func (client *Client) HealthCheck(healthCheckChan chan bool) {
+func (client *Client) HealthCheck(healthCheckChan chan HealthCheckResult) {
 
-	req, err := http.NewRequestWithContext(*client.ctx, http.MethodGet, BROKER_URL, nil)
+	timeoutCtx, cancel := context.WithTimeout(*client.ctx, time.Duration(time.Second*10))
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodGet, BROKER_URL, nil)
 	if err != nil {
 		slog.Error("Something went wrong creating a request instance", "error", err)
 		return
@@ -121,7 +140,12 @@ func (client *Client) HealthCheck(healthCheckChan chan bool) {
 
 	if err != nil {
 		slog.Warn("Something went wrong reaching the broker", "err", err)
-		healthCheckChan <- true
+
+		healthCheckChan <- HealthCheckResult{
+			Err:     err,
+			Message: "Cannot reach broker server. Broker server is unreachable. Please immediately check the server through some monitoring service",
+			ErrType: UnResponsive,
+		}
 		return
 	}
 
@@ -129,9 +153,22 @@ func (client *Client) HealthCheck(healthCheckChan chan bool) {
 
 	body, err := io.ReadAll(resp.Body)
 
+	//NOTE::Not a broker error. Might be an error in our side
 	if err != nil {
 		slog.Error("Error reading response body stream", "error", err)
-		healthCheckChan <- true
+		healthCheckChan <- HealthCheckResult{
+			Err:     err,
+			Message: fmt.Sprintf(""),
+			ErrType: "",
+		}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		healthCheckChan <- HealthCheckResult{
+			Err:     fmt.Errorf("Broker return non 2xx status code"),
+			Message: "Broker return non 2xx status code",
+			ErrType: BadStatusCode,
+		}
 	}
 
 	slog.Info("Broker Responded", "Status Code", resp.StatusCode, "Message", string(body))
@@ -139,6 +176,8 @@ func (client *Client) HealthCheck(healthCheckChan chan bool) {
 }
 
 func main() {
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	defer parentCancel()
 	config, err := Load()
 
 	if err != nil {
@@ -148,19 +187,15 @@ func main() {
 
 	mailManager := NewEmailManager(config)
 
-	healthCheckChan := make(chan bool, 1)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	healthCheckChan := make(chan HealthCheckResult, 1)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
 
-	client := InitClient(time.Duration(time.Second*10), &ctx)
+	client := InitClient(time.Duration(time.Second*10), &parentCtx)
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		defer wg.Done()
 		t := time.NewTicker(time.Second * 20)
 
@@ -172,22 +207,27 @@ func main() {
 
 			case <-sig:
 				slog.Info("Gracefully shutting down")
-				cancel()
 				return
 			}
 		}
-	}()
+	})
 
 	wg.Go(func() {
 		for {
 			select {
 			case val := <-healthCheckChan:
-				if val {
-					if err := mailManager.SendEmail(NewMail(config.EmailFrom, config.EmailTo, "Error Broker Area", "Test Body is here")); err != nil {
+				switch val.ErrType {
+				case BadStatusCode:
+					if err := mailManager.SendEmail(NewMail(config.EmailFrom, config.EmailTo, string(val.ErrType), val.Message)); err != nil {
 						slog.Error("Something went wrong sending email", "Error", err)
 					}
+				case UnResponsive:
+					if err := mailManager.SendEmail(NewMail(config.EmailFrom, config.EmailTo, string(val.ErrType), val.Message)); err != nil {
+						slog.Error("Something went wrong sending email", "Error", err)
+					}
+
 				}
-			case <-ctx.Done():
+			case <-parentCtx.Done():
 				slog.Info("Gracefully shutting down in email sender routine")
 				return
 			}
