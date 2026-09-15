@@ -232,7 +232,7 @@ func main() {
 
 	//I dont know if this is appropriate
 	wg.Go(func() {
-		<- sig
+		<-sig
 		parentCancel()
 	})
 

@@ -16,7 +16,7 @@ import (
 var BADKEYWORDS = []string{"Error", ""}
 
 const SEPARATOR = " "
-const REPLACEMENT = "-"
+const REPLACEMENT = "|"
 
 type ParsedError struct {
 	Day   int
@@ -81,6 +81,7 @@ func RemoveDuplicateCharWithin(line string) string {
 	seen := false
 	result := ""
 	replacement := ([]rune(REPLACEMENT))[0]
+	fmt.Printf("Replacement%c", replacement)
 	var prev rune
 
 	for _, char := range line {
@@ -101,21 +102,20 @@ func RemoveDuplicateCharWithin(line string) string {
 	return result
 }
 
-func ParseLine(line string) (*ParsedError, error) {
+func GetParts(line string, separator string) []string {
 	replaced := strings.ReplaceAll(line, SEPARATOR, REPLACEMENT)
+
 	cleanedLine := RemoveDuplicateCharWithin(replaced)
-	fmt.Println(cleanedLine)
+	parts := strings.Split(cleanedLine, separator)
+	return parts
 
-	trimmedLine := strings.TrimSpace(line)
+}
 
-	if len(trimmedLine) == 0 {
-		return nil, fmt.Errorf("Line does not contain anything except spaces")
-	}
+func ParseLine(line string) (*ParsedError, error) {
+	parts := GetParts(line, REPLACEMENT)
 
-	fmt.Println(trimmedLine)
-	parts := strings.Split(trimmedLine, SEPARATOR)
-
-	fmt.Printf("%v\n", parts)
+	fmt.Printf("Parts :%v\n", parts)
+	fmt.Printf("Parts Len:%d\n", len(parts))
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("Invalid log line")
 	}
@@ -123,7 +123,7 @@ func ParseLine(line string) (*ParsedError, error) {
 	parsedTime, err := time.Parse(time.RFC3339, parts[1])
 
 	if err != nil {
-		return nil, fmt.Errorf("Invalid log line")
+		return nil, fmt.Errorf("Invalid time string")
 
 	}
 
