@@ -223,11 +223,17 @@ func main() {
 				slog.Info("Calling HealthCheck")
 				go client.HealthCheck(healthCheckChan)
 
-			case <-sig:
+			case <-parentCtx.Done():
 				slog.Info("Gracefully shutting down")
 				return
 			}
 		}
+	})
+
+	//I dont know if this is appropriate
+	wg.Go(func() {
+		<- sig
+		parentCancel()
 	})
 
 	wg.Go(func() {
@@ -247,7 +253,6 @@ func main() {
 					if err := mailManager.SendEmail(NewMail(config.EmailFrom, config.EmailTo, string(val.ErrType), val.Message)); err != nil {
 						slog.Error("Something went wrong sending email", "Error", err)
 					}
-
 				}
 			case <-parentCtx.Done():
 				slog.Info("Gracefully shutting down in email sender routine")
