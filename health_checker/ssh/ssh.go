@@ -108,6 +108,7 @@ func (cs *ContainerSupervision) supervise(ctx context.Context) error {
 	go func() {
 		select {
 		case <-ctx.Done():
+			slog.Info("Context is done.. closing routine")
 			cs.containerStreamReaderCloser.Close()
 		case <-watchDog: //Will exit the go routine to prevent go routine leakage
 		}

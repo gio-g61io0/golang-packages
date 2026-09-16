@@ -3,13 +3,19 @@ package main
 import (
 	"context"
 	"log/slog"
+	"os"
+	"os/signal"
 	"personal-http-server/health_checker/ssh"
+	"syscall"
 )
 
 func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
-	err := run(ctx)
+	notifyCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
+	err := run(notifyCtx)
 
 	if err != nil {
 		cancel()
