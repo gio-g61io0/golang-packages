@@ -9,7 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v5 v5.3.1
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/tools v0.48.0
+	golang.org/x/sync v0.22.0
 	gopkg.in/mail.v2 v2.3.1
 )
 
