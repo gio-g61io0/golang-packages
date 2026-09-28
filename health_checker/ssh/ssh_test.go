@@ -27,3 +27,15 @@ func TestGetParts(t *testing.T) {
 	assert.Equal(t, 3, len(parts))
 
 }
+func TestParseLine(t *testing.T) {
+
+	testStr := "2026-09-28T04:36:00.253716712Z [2026-09-28 07:36:00,253: INFO/ForkPoolWorker-3] GTN report: trade_order 3716 deferred — 1 member(s) still at the broker (['E6de39a3b06c7']). An error occured"
+
+	parsedError , err := ParseLine(testStr)
+
+	assert.NoError(t, err)
+	assert.Contains(t,parsedError.Keywords[DFNRELATED], "error")
+	assert.Contains(t,parsedError.Keywords[TRADER], "error")
+	assert.Contains(t,parsedError.Keywords[BROKERAGE], "error")
+
+}
