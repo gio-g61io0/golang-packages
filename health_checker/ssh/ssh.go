@@ -17,12 +17,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var BADKEYWORDS = []string{"Error", ""}
 
-const SEPARATOR = " "
-const REPLACEMENT = "|"
 
-type ParsedError struct {
+type ErrResult struct{
+	Date ParsedDate
+	Container  *ContainerSupervision
+	Keywords map[ERRTYPE][]string
+}
+
+
+type ParsedDate struct {
 	Day   int
 	Month string
 	Year  int
@@ -116,10 +120,19 @@ func (cs *ContainerSupervision) supervise(ctx context.Context) error {
 	defer close(watchDog)
 
 	pr, pw := io.Pipe()
+
+
+	//This go routine does copies data into pw from src
 	go func() {
 		_, err := stdcopy.StdCopy(pw, pw, cs.containerStreamReaderCloser)
+
+		//Not an EOF error
+		if err != nil{
+			slog.Error("Std Copy returns non nil error", "Error", err)
+		}
 		pw.CloseWithError(err)
 	}()
+
 	defer pr.CloseWithError(context.Canceled)
 
 	cs.readStream(pr)
@@ -130,6 +143,8 @@ func (cs *ContainerSupervision) supervise(ctx context.Context) error {
 	return nil
 }
 
+
+//Reads the data into pipe sent from docker stream reader
 func (cs *ContainerSupervision) readStream(reader *io.PipeReader) error {
 
 	scanner := bufio.NewScanner(reader)
@@ -146,7 +161,7 @@ func (cs *ContainerSupervision) readStream(reader *io.PipeReader) error {
 		if err != nil {
 			slog.Error("Something went wrong parsing single line", "Error", err)
 		}
-		fmt.Printf("Parsed Error %+v\n", parsedError)
+		fmt.Printf("Parsed Error from container %s %+v\n", cs.containerName, parsedError)
 	}
 	return nil
 
@@ -176,6 +191,7 @@ func RemoveDuplicateCharWithin(line string) string {
 	return result
 }
 
+
 /*
 Replaces a lot of spaces with the REPLACEMENT
 It then removes the duplicate replacement in order to split the whole log line into a manageable strings
@@ -190,12 +206,20 @@ func GetParts(line string, separator string) []string {
 
 }
 
-func ParseLine(line string) (*ParsedError, error) {
+
+func ParseLine(line string) (*ErrResult, error) {
+	parsedErrorKeywords := map[ERRTYPE][]string{}
+	
 	parts := GetParts(line, REPLACEMENT)
 
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("Invalid log line")
 	}
+
+	joinedParts := strings.Join(parts[1:], "")
+	fmt.Printf("[%s]\n", joinedParts)
+	
+	
 	parsedTime, err := time.Parse(time.RFC3339, parts[0])
 
 	if err != nil {
@@ -210,10 +234,24 @@ func ParseLine(line string) (*ParsedError, error) {
 
 	ksaTime := parsedTime.In(loc)
 
-	return &ParsedError{
-		Year:  ksaTime.Year(),
-		Day:   ksaTime.Day(),
-		Month: ksaTime.Month().String(),
-	}, nil
 
+	//check if any keyword exists 
+	for _, badKeyword := range BADKEYWORDS{
+		for _, keyword := range badKeyword.keywords{
+			if strings.Contains(joinedParts, keyword){
+				parsedErrorKeywords[badKeyword.errorType] = append(parsedErrorKeywords[badKeyword.errorType], keyword)
+			}
+		}
+	}
+
+
+	return &ErrResult{
+		Date: ParsedDate{
+			Year:  ksaTime.Year(),
+			Day:   ksaTime.Day(),
+			Month: ksaTime.Month().String(),
+		},
+		Keywords: parsedErrorKeywords,
+
+	}, nil
 }
