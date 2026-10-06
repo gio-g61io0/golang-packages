@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"personal-http-server/health_checker/mail"
 	"strings"
 	"sync"
 	"time"
@@ -36,16 +37,19 @@ type DockerClient struct {
 	mux        sync.Mutex
 	client     *client.Client
 	containers map[string]*ContainerSupervision
+	mailChan chan mail.Mail
+	mailer  *mail.Mailer
 }
 
 type ContainerSupervision struct {
 	containerID                 string
 	containerStreamReaderCloser io.ReadCloser //Holds the stream connection
 	containerName               string
+	mailChan chan mail.Mail
 }
 
 // I think we should only pass the docker client here
-func NewDockerCLient(ctx context.Context) (*DockerClient, error) {
+func NewDockerCLient(ctx context.Context, mailer *mail.Mailer) (*DockerClient, error) {
 	helper, err := connhelper.GetConnectionHelper("ssh://sindbad_uat")
 
 	if err != nil {
@@ -60,10 +64,14 @@ func NewDockerCLient(ctx context.Context) (*DockerClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	mailChan := make(chan mail.Mail)
+	
 
 	return &DockerClient{
 		client: cli,
 		containers: map[string]*ContainerSupervision{},
+		mailChan: mailChan,
+		mailer: mailer,
 	}, nil
 }
 
@@ -75,6 +83,8 @@ func (c *DockerClient) RunSupervision(ctx context.Context) error {
 		fmt.Println("Container", container.containerName)
 		g.Go(func() error { return container.supervise(gctx) })
 	}
+	
+	g.Go(func() error {return mail.SendAndListen(c.mailer, c.mailChan, gctx)})
 	return g.Wait()
 }
 
@@ -97,6 +107,7 @@ func (c *DockerClient) InitContainerSupervision(ctx context.Context, containerNa
 		containerID:                 id,
 		containerStreamReaderCloser: rc,
 		containerName:               containerName,
+		mailChan: make(chan mail.Mail),
 	}
 	c.containers[id] = container
 	return container, nil
@@ -156,11 +167,16 @@ func (cs *ContainerSupervision) readStream(reader *io.PipeReader) error {
 	//Read and parse
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Printf("Received a line %s\n", line)
 		parsedError, err := ParseLine(line)
 		if err != nil {
 			slog.Error("Something went wrong parsing single line", "Error", err)
 		}
+
+		//Send email here (This must be done through a channel I think or in a go routine)
+		if parsedError != nil{
+			
+		}
+
 		fmt.Printf("Parsed Error from container %s %+v\n", cs.containerName, parsedError)
 	}
 	return nil
@@ -217,7 +233,6 @@ func ParseLine(line string) (*ErrResult, error) {
 	}
 
 	joinedParts := strings.Join(parts[1:], "")
-	fmt.Printf("[%s]\n", joinedParts)
 	
 	
 	parsedTime, err := time.Parse(time.RFC3339, parts[0])
