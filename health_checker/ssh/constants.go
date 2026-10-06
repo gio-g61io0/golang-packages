@@ -11,6 +11,11 @@ const (
 const SEPARATOR = " "
 const REPLACEMENT = "|"
 
+type BadKeyword struct{
+	keywords []string
+	errorType ERRTYPE
+}
+
 var BADKEYWORDS = []BadKeyword{BadKeyword{
 	keywords: []string{"error", "exception", "dfn", "errors", "rejected", "failed"},
 	errorType: DFNRELATED,
@@ -24,8 +29,4 @@ var BADKEYWORDS = []BadKeyword{BadKeyword{
 	errorType:TRADER,
 
 }}
-type BadKeyword struct{
-	keywords []string
-	errorType ERRTYPE
-}
 

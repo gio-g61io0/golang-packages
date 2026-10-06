@@ -235,7 +235,7 @@ func ParseLine(line string) (*ErrResult, error) {
 	ksaTime := parsedTime.In(loc)
 
 
-	//check if any keyword exists 
+	//check if any keyword exists
 	for _, badKeyword := range BADKEYWORDS{
 		for _, keyword := range badKeyword.keywords{
 			if strings.Contains(joinedParts, keyword){
@@ -252,6 +252,5 @@ func ParseLine(line string) (*ErrResult, error) {
 			Month: ksaTime.Month().String(),
 		},
 		Keywords: parsedErrorKeywords,
-
 	}, nil
 }
