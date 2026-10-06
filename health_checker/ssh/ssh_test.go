@@ -19,6 +19,17 @@ func TestRemoveDuplicate(t *testing.T) {
 	removedDuplicate = RemoveDuplicateCharWithin(testStr)
 	assert.Equal(t, "|", removedDuplicate)
 
+
+	testStr = "       a "
+	testStr = strings.ReplaceAll(testStr, SEPARATOR, REPLACEMENT)
+	removedDuplicate = RemoveDuplicateCharWithin(testStr)
+	assert.Equal(t, "|a|", removedDuplicate)
+
+	testStr = ""
+	testStr = strings.ReplaceAll(testStr, SEPARATOR, REPLACEMENT)
+	removedDuplicate = RemoveDuplicateCharWithin(testStr)
+	assert.Equal(t, "", removedDuplicate)
+
 }
 func TestGetParts(t *testing.T) {
 	testStr := "2026-09-15T07:18:37.204448325Z  INFO:     172.18.0.1:52140"
