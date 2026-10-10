@@ -54,7 +54,7 @@ func main(){
 		panic(fmt.Sprintf("An error occured during lexical analysis %s\n Remaining strings %s ", err, remaining))
 	}
 	fmt.Println("Successfully Parsed Input string")
-	fmt.Println("Tokens analyzed %v", tokens)
+	fmt.Printf("Tokens analyzed %v", tokens)
 
 
 }
