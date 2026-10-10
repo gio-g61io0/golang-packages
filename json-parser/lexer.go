@@ -7,10 +7,18 @@ import (
 )
 const NEWLINE = "\n"
 
+type TokenType int
+
+const (
+	NumericToken TokenType= iota
+	CommaToken 
+)
+
 
 type Token struct{
 	Line int
 	Value string
+	Type TokenType
 }
 type Lexer struct{
 	Input string //Sequence of input string 
@@ -27,7 +35,7 @@ func (lexer *Lexer)ConsumeAsNumeric(starting int , line string) (Token, int,  er
 	})
 
 	if idx == -1{
-		return Token{Value: line, Line: 0}, idx, nil
+		return Token{Value: line, Line: 0, Type: NumericToken}, idx, nil
 	}
 	return Token{
 		Value: line[:idx],
