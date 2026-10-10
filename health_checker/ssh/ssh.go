@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"personal-http-server/health_checker/constants"
 	"personal-http-server/health_checker/mail"
+	"personal-http-server/health_checker/utils"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +25,7 @@ import (
 type ErrResult struct{
 	Date ParsedDate
 	Container  *ContainerSupervision
-	Keywords map[ERRTYPE][]string
+	Keywords map[constants.ERRTYPE][]string
 }
 
 
@@ -81,7 +83,7 @@ func (c *DockerClient) RunSupervision(ctx context.Context) error {
 	for _, container := range c.containers {
 		//Run the container supervision as a go
 		fmt.Println("Container", container.containerName)
-		g.Go(func() error { return container.supervise(gctx) })
+		g.Go(func() error { return container.supervise(gctx, c.mailChan) })
 	}
 	
 	g.Go(func() error {return mail.SendAndListen(c.mailer, c.mailChan, gctx)})
@@ -117,7 +119,7 @@ func (c *DockerClient) InitContainerSupervision(ctx context.Context, containerNa
 Runs a blocking readStream.
 Closes the Container's stream when the parent context is cancelled
 */
-func (cs *ContainerSupervision) supervise(ctx context.Context) error {
+func (cs *ContainerSupervision) supervise(ctx context.Context, mailerChan chan mail.Mail) error {
 
 	watchDog := make(chan struct{})
 	go func() {
@@ -146,7 +148,7 @@ func (cs *ContainerSupervision) supervise(ctx context.Context) error {
 
 	defer pr.CloseWithError(context.Canceled)
 
-	cs.readStream(pr)
+	cs.readStream(pr, mailerChan)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -156,7 +158,7 @@ func (cs *ContainerSupervision) supervise(ctx context.Context) error {
 
 
 //Reads the data into pipe sent from docker stream reader
-func (cs *ContainerSupervision) readStream(reader *io.PipeReader) error {
+func (cs *ContainerSupervision) readStream(reader *io.PipeReader, mailerChan chan mail.Mail) error {
 
 	scanner := bufio.NewScanner(reader)
 
@@ -174,6 +176,15 @@ func (cs *ContainerSupervision) readStream(reader *io.PipeReader) error {
 
 		//Send email here (This must be done through a channel I think or in a go routine)
 		if parsedError != nil{
+
+			formattedDetectedKeywords := utils.FormatMapToString(parsedError.Keywords)
+
+			//This is a blocking operation since the channel is not buffered
+			mailerChan<-mail.Mail{
+				To: "gio.gonzales@carsu.edu.ph",
+				Subject: "Log Observer Detected Brokerage Containers Anomalies",
+				Body: fmt.Sprintf("An anomaly was detected for container %s\n", parsedError.Container.containerName) + "Detected keywords: \n" + fmt.Sprintf("%s", formattedDetectedKeywords),
+			}
 			
 		}
 
@@ -186,7 +197,7 @@ func (cs *ContainerSupervision) readStream(reader *io.PipeReader) error {
 func RemoveDuplicateCharWithin(line string) string {
 	seen := false
 	result := ""
-	replacement := ([]rune(REPLACEMENT))[0]
+	replacement := ([]rune(constants.REPLACEMENT))[0]
 	var prev rune
 
 	for _, char := range line {
@@ -214,7 +225,7 @@ It then removes the duplicate replacement in order to split the whole log line i
 */
 func GetParts(line string, separator string) []string {
 	line = strings.TrimSpace(line)
-	replaced := strings.ReplaceAll(line, SEPARATOR, REPLACEMENT)
+	replaced := strings.ReplaceAll(line, constants.SEPARATOR, constants.REPLACEMENT)
 
 	cleanedLine := RemoveDuplicateCharWithin(replaced)
 	parts := strings.Split(cleanedLine, separator)
@@ -224,9 +235,9 @@ func GetParts(line string, separator string) []string {
 
 
 func ParseLine(line string) (*ErrResult, error) {
-	parsedErrorKeywords := map[ERRTYPE][]string{}
+	parsedErrorKeywords := map[constants.ERRTYPE][]string{}
 	
-	parts := GetParts(line, REPLACEMENT)
+	parts := GetParts(line, constants.REPLACEMENT)
 
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("Invalid log line")
@@ -251,14 +262,13 @@ func ParseLine(line string) (*ErrResult, error) {
 
 
 	//check if any keyword exists
-	for _, badKeyword := range BADKEYWORDS{
-		for _, keyword := range badKeyword.keywords{
+	for _, badKeyword := range constants.BADKEYWORDS{
+		for _, keyword := range badKeyword.Keywords{
 			if strings.Contains(joinedParts, keyword){
-				parsedErrorKeywords[badKeyword.errorType] = append(parsedErrorKeywords[badKeyword.errorType], keyword)
+				parsedErrorKeywords[badKeyword.ErrorType] = append(parsedErrorKeywords[badKeyword.ErrorType], keyword)
 			}
 		}
 	}
-
 
 	return &ErrResult{
 		Date: ParsedDate{
@@ -269,3 +279,5 @@ func ParseLine(line string) (*ErrResult, error) {
 		Keywords: parsedErrorKeywords,
 	}, nil
 }
+
+
