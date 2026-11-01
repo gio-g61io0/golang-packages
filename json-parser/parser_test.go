@@ -19,3 +19,23 @@ func TestNumericLexer(t *testing.T){
 	}, token)
 	assert.NoError(t, err)
 }
+func TestStringLexer(t *testing.T){
+	input := "\"\""
+	lexer := jsonparser.NewLexer(input)
+	token, _, err := lexer.ConsumeAsString(input)
+
+	assert.Equal(t, jsonparser.Token{
+		Line: 2,
+		Value: "\"\"",
+		Type: jsonparser.StringToken,
+	}, token)
+	assert.NoError(t, err)
+	input = "\"Gio Gonzales\""
+	token, _, err = lexer.ConsumeAsString(input)
+	assert.Equal(t, jsonparser.Token{
+		Line: 14,
+		Value: "\"Gio Gonzales\"",
+		Type: jsonparser.StringToken,
+	}, token)
+	assert.NoError(t, err)
+}
