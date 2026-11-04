@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
-	jsonparser "personal-http-server/json-parser"
+	// jsonparser "personal-http-server/json-parser"
+	lexer "personal-http-server/json-parser/lexer"
 )
 
 
@@ -48,28 +48,17 @@ func main(){
 		"address1234": "This is an address at San Vicente, Butuan City",
 		}
 	`
-	var token jsonparser.Token
-	var parsed int
+	var token lexer.Token
+	// var parsed int
 	var err error
 
-	parsedToken := []jsonparser.Token{}
-	lexer := jsonparser.NewLexer(jsonString)
-	for {
+	parsedToken := []lexer.Token{}
+	lex := lexer.NewLexer(jsonString)
 
-		token, jsonString, parsed, err = lexer.Step(jsonString)
-
-		slog.Info("Remaning string input", "remaining", jsonString)
-		
-		
-		if err != nil || parsed == 0 {
-			slog.Error("Something went wrong", "error", err)
-			break
-		}
+	for err == nil {
+		token, jsonString, _, err = lex.Step()
+		slog.Info("Token lexed", "Token", token)
 		parsedToken = append(parsedToken, token)
 	}
-
-	fmt.Println("Successfully Parsed Input string")
-	fmt.Printf("Tokens analyzed %v", parsedToken)
-
 
 }
