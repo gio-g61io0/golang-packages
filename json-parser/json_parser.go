@@ -46,24 +46,6 @@ func (parser *Parser)Parse() error{
 	var err error
 
 	//iterates every line and for every line, we iteratively produce a token 
-	for line := range strings.Lines(parser.input){
-
-		jsonString := line
-
-		for  len(jsonString) != 0 {
-			token, jsonString, parsed, err = parser.lexer.Step(jsonString)
-
-			slog.Info("Remaning string input", "remaining", jsonString)
-			if err != nil{
-				slog.Error("Something went wrong producing a token", "error", err)
-				return err
-			}
-			if parsed == 0{
-				slog.Info("No token is produced for the remaining sequence of chars in a line")
-				break
-			}
-		}
-		parser.LineNumber  += 1
-	}
+	
 	return nil
 }

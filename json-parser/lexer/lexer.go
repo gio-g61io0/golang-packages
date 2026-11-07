@@ -19,6 +19,7 @@ const (
 	ObjectCloserToken
 	ArrayOpenerToken
 	ArrayCloserToken
+	EOFToken
 )
 
 
@@ -77,40 +78,52 @@ func (lexer *Lexer)GoNewLine(){
 	lexer.Input = strings.TrimPrefix(lexer.Input, "\n\t")
 }
 func (lexer *Lexer)CleanInputPrefix(){
-	lexer.Input = strings.Trim(lexer.Input, " ")
+	lexer.Input = strings.TrimLeftFunc(lexer.Input, func(r rune) bool {
+		return unicode.IsSpace(r)
+	})
 }
 //This will return a single token that it can see
 func (lexer *Lexer)Step() (Token, string, int,  error) {
 	//Clean the string first
 	var line string
+
+	slog.Info("Remaning Input", "#Input", lexer.Input)
 	if len(lexer.Input) == 0{
 		return Token{}, "", 0, fmt.Errorf("Cannot produce token. No remaining input")
 	}
+
+	//This removes whitespaces in prio
 	lexer.CleanInputPrefix()
 
 	newLineIdx := strings.Index(lexer.Input, NEWLINE)
+	
 	if newLineIdx  == -1{
 		//Might be the end line of the sequence of characters
 		slog.Warn("No newline for the remaining input string")
 		line = lexer.Input
 	//Might be that we should go to the next line
-	}else if newLineIdx == 0{
-		lexer.GoNewLine()
-		newLineIdx = strings.Index(lexer.Input, NEWLINE)
-		line = lexer.Input[:newLineIdx]
 	}else{
-		line = lexer.Input[:newLineIdx]
-	}
-	if len(line) == 0{
-		return Token{}, "", 0, fmt.Errorf("Cannot parse empty string")
+		line = lexer.Input[:newLineIdx + 1] //The whole line including the newline
 	}
 
+	slog.Info("Uncleaned Line", "Line", line)
 	//I think I will only need to check the first character?
 	cleanedLine := strings.TrimSpace(line)
+	slog.Info("Cleaned Line", "Line", cleanedLine)
+
+
+	//Nothing is left to lex
+	if len(cleanedLine) == 0{
+		return Token{
+			Line:0,
+			Value: "",
+			Type: EOFToken,
+		}, "", 0, nil
+	}
+
 	runes := []rune(cleanedLine)
 	char := runes[0]
 
-	slog.Info("Cleaned Line", "Line", cleanedLine)
 
 	if unicode.IsDigit(char){
 		numericToken, parsedChars, err := lexer.ConsumeAsNumeric(cleanedLine)
