@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"personal-http-server/json-parser/lexer"
-	"strings"
 )
 
 
@@ -46,6 +45,19 @@ func (parser *Parser)Parse() error{
 	var err error
 
 	//iterates every line and for every line, we iteratively produce a token 
-	
+	for {
+		token, _, parsed, err = parser.lexer.Step()
+		if err != nil{
+			slog.Error("Something went wrong", "#Error", err)
+		}
+		if token.Type == lexer.EOFToken{
+			slog.Info("Lexer is done tokenizing", "#Token", token)
+			break
+		}
+		if parsed == 0{
+			slog.Warn("Nothing is parsed", "#Token", token)
+			break
+		}
+	}
 	return nil
 }
